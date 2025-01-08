@@ -8,23 +8,32 @@ from dotenv import load_dotenv
 
 # Load environment variables from .env file
 load_dotenv()
-WHATSAPP_NUMBER = '+919959363113'  # Replace with the recipient's WhatsApp number
+
+# Define recipient numbers
+THUMB_UP_NUMBER = '+91 85208 94939'  # Replace with the recipient's WhatsApp number for thumb up
+INDEX_UP_NUMBER = '+91 91103 81484'  # Replace with the recipient's WhatsApp number for index up
 
 # Function to send WhatsApp message
-def send_whatsapp_message():
+def send_whatsapp_message(phone_no, message):
     try:
-        pywhatkit.sendwhatmsg_instantly(phone_no=WHATSAPP_NUMBER, message="Emergency Detected! Help!", wait_time=50)
-        print("WhatsApp message sent successfully.")
+        pywhatkit.sendwhatmsg_instantly(phone_no=phone_no, message=message, wait_time=50)
+        print(f"WhatsApp message sent successfully to {phone_no}.")
     except Exception as e:
-        print(f"Error sending WhatsApp message: {e}")
+        print(f"Error sending WhatsApp message to {phone_no}: {e}")
 
 # Initialize MediaPipe Hands
 mp_hands = mp.solutions.hands
-hands = mp_hands.Hands(max_num_hands=1, min_detection_confidence=0.7)
+hands = mp_hands.Hands(static_image_mode=False, max_num_hands=1, min_detection_confidence=0.7)
 mp_draw = mp.solutions.drawing_utils
 
-# Hardcoded gesture class names
-class_names = ['fist', 'open', 'peace', 'thumbs_up', 'help']
+# Helper function to check raised fingers
+def detect_fingers(landmarks):
+    fingers = []
+    # Thumb: Compare tip (4) to MCP (2)
+    fingers.append(landmarks[4][0] > landmarks[3][0])  # Assuming right hand; invert for left
+    # Index: Compare tip (8) to PIP (6)
+    fingers.append(landmarks[8][1] < landmarks[6][1])
+    return fingers
 
 # Main function
 def main():
@@ -59,22 +68,20 @@ def main():
                 # Draw landmarks and connections on the frame
                 mp_draw.draw_landmarks(frame, hand_lms, mp_hands.HAND_CONNECTIONS)
 
-                # Predict gesture
+                # Detect raised fingers
                 try:
-                    landmarks_array = np.array(landmarks).flatten()
-                    if len(landmarks_array) == 42:  # Ensure expected input size
-                        prediction = [0.1] * len(class_names)  # Mock prediction for demonstration
-                        prediction[-1] = 0.8  # Mock confidence for 'help'
-                        class_id = np.argmax(prediction)
-                        class_name = class_names[class_id]
+                    fingers = detect_fingers(landmarks)
+                    if fingers[0] and not fingers[1]:
+                        class_name = 'thumbs_up'
+                        print("Thumbs up gesture detected. Sending emergency message...")
+                        send_whatsapp_message(THUMB_UP_NUMBER, "Emergency detected. Please help!!")
+                    elif fingers[1] and not fingers[0]:
+                        class_name = 'index_up'
+                        print("Index finger up gesture detected. Sending emergency message...")
+                        send_whatsapp_message(INDEX_UP_NUMBER, "Emergency detected. Please help!!")
                 except Exception as e:
-                    print(f"Error during prediction: {e}")
+                    print(f"Error during finger detection: {e}")
                     continue
-
-                # Trigger actions if "help" gesture is detected
-                if class_name.lower() == 'help':
-                    print("Help gesture detected. Initiating emergency actions...")
-                    send_whatsapp_message()
 
         # Display the prediction on the frame
         cv2.putText(frame, class_name, (10, 50), cv2.FONT_HERSHEY_SIMPLEX, 
